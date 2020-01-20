@@ -2,8 +2,17 @@
 //
 
 #include <iostream>
+#include <string>
+#include <time.h>
 
 using namespace std;
+
+ struct widget{
+	string id;
+	string source;
+	time_t time;
+	bool broken;
+};
 
 int main()
 {
