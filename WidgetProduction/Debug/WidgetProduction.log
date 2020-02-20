@@ -1,3 +1,0 @@
-﻿  WidgetProduction.cpp
-C:\Users\Alex's Beast\source\repos\WidgetProduction\WidgetProduction\WidgetProduction.cpp(92,15): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
-  WidgetProduction.vcxproj -> C:\Users\Alex's Beast\source\repos\WidgetProduction\Debug\WidgetProduction.exe
