@@ -105,9 +105,11 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
         if (w.get_is_broken() == "false") {
             //lock the output so they don't get scrambled with other consumers
             mtx_print.lock();
+            //I need to convert the time to string otherwise the time will be off and the newline won't print 
+            //so some lines might combine
             std::cout << consumer << " consumes " << widgetOutput << " in "
-                << w.get_time_duration(std::chrono::system_clock::now()).count() << "s time\n";
-            //std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); This causes the program to consume the first widget multiple times....
+                << std::to_string(w.get_time_duration(std::chrono::system_clock::now()).count()) << "s time\n";
+            //std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); This causes the program to consume the first widget multiple times??
             mtx_print.unlock();
         }
         else {
