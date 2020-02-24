@@ -2,122 +2,54 @@
 //
 
 #include <iostream>
-#include <string>
-#include <ctime>
-#include <chrono>
-#include <thread>
 #include <mutex>
 #include <vector>
+#include <ctime>
+#include <sys/timeb.h>
+#include <atomic>
+#include "widget_definition.h"
 
-using namespace std;
 
- struct widget_def{
-    string id;
-    string producer;
-    chrono::system_clock::time_point timeInit; //ctime doesn't show less than second
-    bool isBroken;
-};
+//TODO: get rid of that annoying print on the same line!!! '/n' is somehow missing in the print??
 
- class widget {
- private:
-     widget_def w1;
+void produce_widget(std::vector<widget*>&, std::string, int, int, int&, int, int);
+void consume_widget(std::vector<widget*>&, std::string, bool&);
 
- public: 
-
-    widget(string producer, int id_length, bool broken_widget) {
-        //Define ID as 16-16 random characters
-        char randLetNum;
-        int IDSeperator = id_length/2 - 1; //Add '-' halfway in the ID
-        bool LetOrNum;
-
-        for (int i = 0; i < id_length; i++) {
-            LetOrNum = static_cast<bool>(rand() % 2);
-            if (LetOrNum) {
-                randLetNum = '0' + rand() % 10; //Random number
-            }
-            else {
-                randLetNum = 'a' + rand() % 26; //Random letter
-            }
-            (this->w1).id += randLetNum;
-            //Add - in ID
-            if (i == IDSeperator) {
-                (this->w1).id += '-';
-            }
-        }
-        //Define source
-        this->w1.producer = producer;
-        //Define time
-        this->w1.timeInit = chrono::system_clock::now();         
-        //Decide if this widget is broken
-        this->w1.isBroken = broken_widget;
-    }
-
-    string get_id() {
-        return (this->w1).id;
-    }
-
-    string get_producer() {
-        return (this->w1).producer;
-    }
-
-    //Get time in string format HH:MM:SS to output
-    string get_time() {
-        struct tm currTime = {}; //zero-initializes currTime
-        time_t timeCurrent = chrono::system_clock::to_time_t((this->w1).timeInit);
-        localtime_s(&currTime, &timeCurrent); //convert [time since epoch] to [local time]
-        string time = to_string(currTime.tm_hour) + ':' + to_string(currTime.tm_min) + ':' + to_string(currTime.tm_sec);
-        return time;
-    }
-
-    string get_broken() {
-        if (this->w1.isBroken) {
-            return "true";
-        }
-        else {
-            return "false";
-        }
-    }
-
-    chrono::duration<double> get_time_consumed(chrono::system_clock::time_point time_consumed) {
-        return time_consumed - (this->w1.timeInit);
-    }
- };
-
-void produce_widget(vector<widget*>&, string, int, int, int&, int);
-void consume_widget(vector<widget*>&,string, bool&);
-
-mutex mtx_produce;
-mutex mtx_consume;
-mutex mtx_print;
-mutex mtx_broken;
+//Protect my resources!!
+std::mutex mtx_produce;
+std::mutex mtx_consume;
+std::mutex mtx_print;
+std::mutex mtx_broken;
 
 int main()
 {
-    //TODO: Since I am running multiple functions the same second I need more fine grain on time
-    srand(time(NULL)); //random number/letter generator
-
     int widgetIdLength = 32;
-    int numProducers = 10; //Right now can only have 2 producers max hmmm
-    int numConsumers = 5;
+    int totProducers = 10; //Right now can only have 2 producers max hmmm
+    int totConsumers = 5;
     int maxWidgets = 50;
     int brokenWidget = 2; //Which produced widget should be broken
     int totWidgetsCreated = 0;
+    //TODO: protect isBrokenWidget using atomic type (didn't work for some reason)
     bool isBrokenWidget = false;
-    vector<widget*> createdWidgets;
-    createdWidgets.reserve(maxWidgets);
-    vector<thread> tProducers;
-    vector<thread> tConsumers;
 
-    for (int i = 0; i < numProducers; i++) {
-        string producerNum = "producer_" + to_string(i);
-        thread t_p(produce_widget, ref(createdWidgets), producerNum, widgetIdLength, brokenWidget, ref(totWidgetsCreated), maxWidgets);
-        tProducers.push_back(move(t_p));
+    //widget pointer to store all the widgets I create
+    std::vector<widget*> createdWidgets;
+    createdWidgets.reserve(maxWidgets);
+    std::vector<std::thread> tProducers;
+    std::vector<std::thread> tConsumers;
+
+    for (int i = 0; i < totProducers; i++) {
+        
+        std::string producerNum = "producer_" + std::to_string(i);
+        std::thread t_p(produce_widget, std::ref(createdWidgets), producerNum, widgetIdLength, brokenWidget, std::ref(totWidgetsCreated), maxWidgets, i);
+        //move() here allows the t_p thread to move because copy function for threads disabled
+        tProducers.push_back(std::move(t_p));
     }
     
-    for (int i = 0; i < numConsumers;i++) {
-        string consumerNum = "consumer_" + to_string(i);
-        thread t_c(consume_widget, ref(createdWidgets), consumerNum, ref(isBrokenWidget));
-        tConsumers.push_back(move(t_c));
+    for (int i = 0; i < totConsumers;i++) {
+        std::string consumerNum = "consumer_" + std::to_string(i);
+        std::thread t_c(consume_widget, std::ref(createdWidgets), consumerNum, std::ref(isBrokenWidget));
+        tConsumers.push_back(std::move(t_c));
     }
     
     //After we consume the broken widget we should join all the threads and end the program 
@@ -128,58 +60,64 @@ int main()
         (*it).join();
     }
 
-    //Free the pointers in the vector
+    //Free the pointers in the widgets vector
+    //vectors will free themselves!
     for (auto i = createdWidgets.begin(); i != createdWidgets.end(); i++) {
         delete *i;
     }
 
 }
 
-void produce_widget(vector<widget*> &createdWidgets, string producer,int idLength, int brokenWidget, int &totWidgetsCreated, int maxWidgets) {
+void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,int idLength, int brokenWidget, int &totWidgetsCreated, int maxWidgets, int threadNum) {
     while (totWidgetsCreated < maxWidgets) {
         mtx_produce.lock();
+        //Define the srand() when producing the widget in order to get different times for each thread!
+        std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch());
+        srand(ns.count() + threadNum); //random number/letter generator
         createdWidgets.push_back(new widget(producer, idLength, totWidgetsCreated == brokenWidget));
         totWidgetsCreated++;
         mtx_produce.unlock();
         //Add a delay to let other producers get a chance to create widgets
-        this_thread::sleep_for(chrono::nanoseconds(1000)); //This seems to work for now anything lower and it is not a good enough delay
+        std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); //This seems to work for now anything lower and one thread takes over
     }
 }
 
-void consume_widget(vector<widget*> &createdWidgets, string consumer, bool &isBrokenWidget) {
+void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, bool &isBrokenWidget) {
     
     while(!isBrokenWidget){
         
         //Check that there are widgets for the consumer to consume
         mtx_consume.lock();
         if (createdWidgets.empty()) {
-            mtx_consume.unlock(); //Make sure to unlock since I will be continuing here
+            mtx_consume.unlock(); //Make sure to unlock to free other consumers
             continue;
         }
-        //Take the widget out of the vector when consuming it (so the same widget doesn't get consumed)
+        //Take the widget out of the vector when consuming it (so the same widget doesn't get consumed twice)
         widget w = *createdWidgets.back();
         createdWidgets.pop_back();
         mtx_consume.unlock();
 
-        string widgetOutput = "[id=" + w.get_id() +
+        std::string widgetOutput = "[id=" + w.get_id() +
             " source=" + w.get_producer() +
-            " time=" + w.get_time() +
-            " broken=" + w.get_broken() + "]";
+            " time=" + w.get_time_created() +
+            " broken=" + w.get_is_broken() + "]";
 
-        if (w.get_broken() == "false") {
+        if (w.get_is_broken() == "false") {
             //lock the output so they don't get scrambled with other consumers
             mtx_print.lock();
-            cout << consumer << " consumes " << widgetOutput << " in " 
-                << w.get_time_consumed(chrono::system_clock::now()).count() << "s time\n";
+            std::cout << consumer << " consumes " << widgetOutput << " in "
+                << w.get_time_duration(std::chrono::system_clock::now()).count() << "s time\n";
+            //std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); This causes the program to consume the first widget multiple times....
             mtx_print.unlock();
         }
         else {
-            mtx_broken.lock();
-            isBrokenWidget = true;
+            //TODO: Think about combining broken mutex with the print mutex (atm this is best way I think)
+            mtx_broken.lock(); 
+            isBrokenWidget = true; 
             mtx_broken.unlock();
             //Need to lock print too otherwise broken widget print can be inside the unbroken widget print
             mtx_print.lock();
-            cout << consumer << " found a broken widget " << widgetOutput << " -- stopping production\n";
+            std::cout << consumer << " found a broken widget " << widgetOutput << " -- stopping production\n";
             mtx_print.unlock();
         }
     }
