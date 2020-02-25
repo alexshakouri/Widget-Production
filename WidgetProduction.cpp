@@ -9,9 +9,6 @@
 #include <atomic>
 #include "widget_definition.h"
 
-
-//TODO: get rid of that annoying print on the same line!!! '/n' is somehow missing in the print??
-
 void produce_widget(std::vector<widget*>&, std::string, int, int, int&, int, int);
 void consume_widget(std::vector<widget*>&, std::string, bool&);
 
@@ -21,13 +18,38 @@ std::mutex mtx_consume;
 std::mutex mtx_print;
 std::mutex mtx_broken;
 
-int main()
+int main(int argc, char** args)
 {
-    int widgetIdLength = 32;
-    int totProducers = 10; //Right now can only have 2 producers max hmmm
+    int totProducers = 10;
     int totConsumers = 5;
     int maxWidgets = 50;
     int brokenWidget = 2; //Which produced widget should be broken
+
+    for (int i = 1; i < argc; i++) {
+        //std::cout << args[i] << std::endl;
+        if (strcmp(args[i], "-n")==0) {
+            i++;
+            maxWidgets = atoi(args[i]);
+        }
+        else if (strcmp(args[i], "-p") == 0) {
+            i++;
+            totProducers = atoi(args[i]);
+        }
+        else if (strcmp(args[i], "-c") == 0) {
+            i++;
+            totConsumers = atoi(args[i]);
+        }
+        else if (strcmp(args[i], "-k") == 0) {
+            i++;
+            brokenWidget = atoi(args[i]);
+        }
+        else {
+            std::cout << "Do not recognize command please re-enter" << std::endl;
+            return 1;
+        }
+    }
+    
+    int widgetIdLength = 32;
     int totWidgetsCreated = 0;
     //TODO: protect isBrokenWidget using atomic type (didn't work for some reason)
     bool isBrokenWidget = false;
