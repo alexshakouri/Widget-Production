@@ -5,8 +5,6 @@
 #include <chrono>
 #include <thread>
 
-
-
 struct widget_def {
     std::string id;
     std::string producer;
