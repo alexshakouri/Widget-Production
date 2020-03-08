@@ -175,7 +175,10 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
             pthread_rwlock_wrlock(&tRWBroken);
             consumeBrokenWidget = true;
 	    pthread_rwlock_unlock(&tRWBroken);
-            //Need to lock print too otherwise can print consumes and broken widget at same time
+            pthread_rwlock_rdlock(&tRWBroken);
+	    brokenProtect = consumeBrokenWidget; //need to update brokenProtect as well to break the loop
+            pthread_rwlock_unlock(&tRWBroken);
+	    //Need to lock print too otherwise can print consumes and broken widget at same time
 	    pthread_rwlock_wrlock(&tRWPrint);
             std::cout << consumer << " found a broken widget " << widgetOutput << " -- stopping production\n";
             pthread_rwlock_unlock(&tRWPrint);
