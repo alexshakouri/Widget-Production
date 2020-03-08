@@ -8,6 +8,7 @@
 #include <sys/timeb.h>
 #include <atomic>
 #include "widget_definition.h"
+#include <pthread.h>
 
 //be better to include varnames here in parameters to let the reader kn ow what each function does!
 void produce_widget(std::vector<widget*>& createdWidgets, std::string producer, int idLength, int brokenWidget, int& totWidgetsCreated, int maxWidgets, int threadNum);
@@ -117,7 +118,7 @@ int main(int argc, char** args)
 void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,int idLength, int brokenWidget, int &totWidgetsCreated, int maxWidgets, int threadNum) {
     while (totWidgetsCreated < maxWidgets) {
         gMTXWidgets.lock();
-        //Define the srand() when producing the widget in order to get different times for each thread!
+	//Define the srand() when producing the widget in order to get different times for each thread!
         std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch());
         srand(ns.count() + threadNum); //random number/letter generator
         createdWidgets.push_back(new widget(producer, idLength, totWidgetsCreated == brokenWidget));
@@ -125,7 +126,7 @@ void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,i
         gMTXWidgets.unlock();
         //Add a delay to let other producers get a chance to create widgets
         //TODO: fix this so don't have to use a sleep function to wait for the threads to finish
-        std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); //This seems to work for now anything lower and one thread takes over
+       	std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); //This seems to work for now anything lower and one thread takes over
     }
 }
 
@@ -136,8 +137,11 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
     gMTXBroken.unlock();
 
     while(!brokenProtect){
+        gMTXBroken.lock();
+        brokenProtect = consumeBrokenWidget;
+        gMTXBroken.unlock();
         
-        //Check that there are widgets for the consumer to consume
+	//Check that there are widgets for the consumer to consume
         gMTXWidgets.lock();
         if (createdWidgets.empty()) {
             gMTXWidgets.unlock(); //Make sure to unlock to free other consumers
@@ -171,9 +175,6 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
             std::cout << consumer << " found a broken widget " << widgetOutput << " -- stopping production\n";
             gMTXPrint.unlock();
         }
-        gMTXBroken.lock();
-        brokenProtect = consumeBrokenWidget;
-        gMTXBroken.unlock();
     }
 
 }

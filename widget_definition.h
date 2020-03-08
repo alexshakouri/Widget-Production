@@ -1,7 +1,7 @@
 #ifndef WIDGET_DEFINITION_H //Always good practice to have headers to protect multiple instaces
 #define WIDGET_DEFINITION_H
 
-#include <string>
+#include <string.h>
 #include <chrono>
 #include <thread>
 
@@ -57,10 +57,9 @@ public:
     //Get time in string format HH:MM:SS to output to STDOUT
     //TODO: output the time in milliseconds to see a difference
     std::string get_time_created() {
-        struct tm timeCreatedLocal = {}; //zero-initializes currTime
         time_t timeCreatedEpoch = std::chrono::system_clock::to_time_t((this->w1).timeCreated);
-        localtime_s(&timeCreatedLocal, &timeCreatedEpoch); //convert [time since epoch] to [local time]
-        return (std::to_string(timeCreatedLocal.tm_hour) + ':' + std::to_string(timeCreatedLocal.tm_min) + ':' + std::to_string(timeCreatedLocal.tm_sec));
+	struct tm* timeCreatedLocal = std::localtime(&timeCreatedEpoch); //convert [time since epoch] to [local time]
+        return (std::to_string(timeCreatedLocal->tm_hour) + ':' + std::to_string(timeCreatedLocal->tm_min) + ':' + std::to_string(timeCreatedLocal->tm_sec));
     }
 
     std::string get_is_broken() {
