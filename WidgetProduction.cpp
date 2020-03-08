@@ -13,12 +13,7 @@
 void produce_widget(std::vector<widget*>& createdWidgets, std::string producer, int idLength, int brokenWidget, int& totRWWidgetsCreated, int maxWidgets, int threadNum);
 void consume_widget(std::vector<widget*>& createdWidgets, std::string consumer, bool& consumeBrokenWidget);
 
-//Protect my resources!!
-std::mutex gMTXWidgets;
-std::mutex gMTXPrint;
-std::mutex gMTXBroken;
-
-//Use pthread
+//Use rwlocks to protect data
 pthread_rwlock_t tRWWidgets;
 pthread_rwlock_t tRWPrint;
 pthread_rwlock_t tRWBroken;
@@ -89,8 +84,10 @@ int main(int argc, char** args)
     std::vector<std::thread> Producers;
     std::vector<std::thread> Consumers;
 
-    //Initialize pthread
+    //Initialize rwlocks to default
     pthread_rwlock_init(&tRWWidgets, NULL);
+    pthread_rwlock_init(&tRWBroken, NULL);
+    pthread_rwlock_init(&tRWPrint, NULL);
 
     for (int i = 0; i < totalProducers; i++) {
         
