@@ -5,19 +5,23 @@
 #include <mutex>
 #include <vector>
 #include <ctime>
-#include <sys/timeb.h>
 #include <atomic>
 #include "widget_definition.h"
 #include <pthread.h>
 
 //be better to include varnames here in parameters to let the reader kn ow what each function does!
-void produce_widget(std::vector<widget*>& createdWidgets, std::string producer, int idLength, int brokenWidget, int& totWidgetsCreated, int maxWidgets, int threadNum);
+void produce_widget(std::vector<widget*>& createdWidgets, std::string producer, int idLength, int brokenWidget, int& totRWWidgetsCreated, int maxWidgets, int threadNum);
 void consume_widget(std::vector<widget*>& createdWidgets, std::string consumer, bool& consumeBrokenWidget);
 
 //Protect my resources!!
 std::mutex gMTXWidgets;
 std::mutex gMTXPrint;
 std::mutex gMTXBroken;
+
+//Use pthread
+pthread_rwlock_t tRWWidgets;
+pthread_rwlock_t tRWPrint;
+pthread_rwlock_t tRWBroken;
 
 #define gWidgetIdLength 32
 #define defaultTotalProducers 1
@@ -33,7 +37,6 @@ int main(int argc, char** args)
     int brokenWidget = defaultBrokenWidget; //Which produced widget should be broken
 
     //Go through all the defined command line arguments
-    //TODO: fix user input protection
     for (int i = 1; i < argc; i++) {
         if (strcmp(args[i], "-n") == 0) {
             i++;
@@ -77,7 +80,7 @@ int main(int argc, char** args)
         }
     }
 
-    int totWidgetsCreated = 0;
+    int totRWWidgetsCreated = 0;
     //TODO: protect isBrokenWidget using atomic type
     bool consumeBrokenWidget = false;
     //widget pointer to store all the widgets created
@@ -86,10 +89,13 @@ int main(int argc, char** args)
     std::vector<std::thread> Producers;
     std::vector<std::thread> Consumers;
 
+    //Initialize pthread
+    pthread_rwlock_init(&tRWWidgets, NULL);
+
     for (int i = 0; i < totalProducers; i++) {
         
         std::string producerNum = "producer_" + std::to_string(i);
-        std::thread tempProducer(produce_widget, std::ref(createdWidgets), producerNum, gWidgetIdLength, brokenWidget, std::ref(totWidgetsCreated), maxWidgets, i);
+        std::thread tempProducer(produce_widget, std::ref(createdWidgets), producerNum, gWidgetIdLength, brokenWidget, std::ref(totRWWidgetsCreated), maxWidgets, i);
         //std::move() here allows the tempProducer thread to move because copy function for threads disabled
         Producers.push_back(std::move(tempProducer));
     }
@@ -115,15 +121,16 @@ int main(int argc, char** args)
 
 }
 
-void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,int idLength, int brokenWidget, int &totWidgetsCreated, int maxWidgets, int threadNum) {
-    while (totWidgetsCreated < maxWidgets) {
-        gMTXWidgets.lock();
-	//Define the srand() when producing the widget in order to get different times for each thread!
+void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,int idLength, int brokenWidget, int &totRWWidgetsCreated, int maxWidgets, int threadNum) {
+    while (totRWWidgetsCreated < maxWidgets) {
+	//Define the srand() when producing the widget in order to get different random numbers for each thread!
         std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch());
-        srand(ns.count() + threadNum); //random number/letter generator
-        createdWidgets.push_back(new widget(producer, idLength, totWidgetsCreated == brokenWidget));
-        totWidgetsCreated++;
-        gMTXWidgets.unlock();
+        srand(ns.count() + threadNum); //random number/letter generator for each thread
+
+        pthread_rwlock_wrlock(&tRWWidgets);
+	createdWidgets.push_back(new widget(producer, idLength, totRWWidgetsCreated == brokenWidget));
+        totRWWidgetsCreated++;
+	pthread_rwlock_unlock(&tRWWidgets);
         //Add a delay to let other producers get a chance to create widgets
         //TODO: fix this so don't have to use a sleep function to wait for the threads to finish
        	std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); //This seems to work for now anything lower and one thread takes over
@@ -132,25 +139,26 @@ void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,i
 
 void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, bool &consumeBrokenWidget) {
     //protect isbrokenwidget in the while loop
-    gMTXBroken.lock();
+    pthread_rwlock_rdlock(&tRWBroken);
     bool brokenProtect = consumeBrokenWidget;
-    gMTXBroken.unlock();
+    pthread_rwlock_unlock(&tRWBroken);
 
     while(!brokenProtect){
-        gMTXBroken.lock();
+	//Update this brokenProtect
+	pthread_rwlock_rdlock(&tRWBroken);
         brokenProtect = consumeBrokenWidget;
-        gMTXBroken.unlock();
+	pthread_rwlock_unlock(&tRWBroken);
         
 	//Check that there are widgets for the consumer to consume
-        gMTXWidgets.lock();
+        pthread_rwlock_wrlock(&tRWWidgets);
         if (createdWidgets.empty()) {
-            gMTXWidgets.unlock(); //Make sure to unlock to free other consumers
+            pthread_rwlock_unlock(&tRWWidgets); //Unlock for other consumers
             continue;
         }
         //Take the widget out of the vector when consuming it (so the same widget doesn't get consumed twice)
         widget w = *createdWidgets.back();
         createdWidgets.pop_back();
-        gMTXWidgets.unlock();
+	pthread_rwlock_unlock(&tRWWidgets);
 
         std::string widgetOutput = "[id=" + w.get_id() +
             " source=" + w.get_producer() +
@@ -158,22 +166,22 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
             " broken=" + w.get_is_broken() + "]";
 
         if (w.get_is_broken() == "false") {
-            gMTXPrint.lock();
+	    pthread_rwlock_wrlock(&tRWPrint);
             //Need to convert the time to string otherwise the time will be off and the newline won't print 
             //so some lines might combine
             std::cout << consumer << " consumes " << widgetOutput << " in "
                 << std::to_string(w.get_time_duration(std::chrono::system_clock::now()).count()) << "s time\n";
             //std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); This causes the program to consume the first widget multiple times??
-            gMTXPrint.unlock();
+            pthread_rwlock_unlock(&tRWPrint);
         }
         else {
-            gMTXBroken.lock();
+            pthread_rwlock_wrlock(&tRWBroken);
             consumeBrokenWidget = true;
-            gMTXBroken.unlock();
-            //Need to lock print too otherwise broken widget print can be inside the unbroken widget print
-            gMTXPrint.lock();
+	    pthread_rwlock_unlock(&tRWBroken);
+            //Need to lock print too otherwise can print consumes and broken widget at same time
+	    pthread_rwlock_wrlock(&tRWPrint);
             std::cout << consumer << " found a broken widget " << widgetOutput << " -- stopping production\n";
-            gMTXPrint.unlock();
+            pthread_rwlock_unlock(&tRWPrint);
         }
     }
 
