@@ -175,6 +175,7 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
             pthread_rwlock_wrlock(&tRWBroken);
             consumeBrokenWidget = true;
 	    pthread_rwlock_unlock(&tRWBroken);
+
             pthread_rwlock_rdlock(&tRWBroken);
 	    brokenProtect = consumeBrokenWidget; //need to update brokenProtect as well to break the loop
             pthread_rwlock_unlock(&tRWBroken);

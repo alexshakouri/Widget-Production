@@ -5,16 +5,12 @@
 #include <chrono>
 #include <thread>
 
-struct widget_def {
+class widget {
+private:
     std::string id;
     std::string producer;
     std::chrono::system_clock::time_point timeCreated; //ctime doesn't show less than second
     bool isBroken;
-};
-
-class widget {
-private:
-    widget_def w1;
 
 public:
 
@@ -32,38 +28,40 @@ public:
             else {
                 randLetNum = 'a' + rand() % 26; //Random letter
             }
-            (this->w1).id += randLetNum;
+            this->id += randLetNum;
             //Add - in ID
             if (i == IDSeperator) {
-                (this->w1).id += '-';
+                this->id += '-';
             }
         }
         //Define source
-        this->w1.producer = producer;
+        this->producer = producer;
         //Define time that widget was created
-        this->w1.timeCreated = std::chrono::system_clock::now();
+        this->timeCreated = std::chrono::system_clock::now();
         //Decide if this widget is broken
-        this->w1.isBroken = isBroken;
+        this->isBroken = isBroken;
     }
 
     std::string get_id() {
-        return (this->w1).id;
+        return this->id;
     }
 
     std::string get_producer() {
-        return (this->w1).producer;
+        return this->producer;
     }
 
     //Get time in string format HH:MM:SS to output to STDOUT
     //TODO: output the time in milliseconds to see a difference
+    //TODO:HAVE ONE FUNCTION TO PRINT time and another to RETURN TIME
     std::string get_time_created() {
-        time_t timeCreatedEpoch = std::chrono::system_clock::to_time_t((this->w1).timeCreated);
+        time_t timeCreatedEpoch = std::chrono::system_clock::to_time_t(this->timeCreated);
 	struct tm* timeCreatedLocal = std::localtime(&timeCreatedEpoch); //convert [time since epoch] to [local time]
         return (std::to_string(timeCreatedLocal->tm_hour) + ':' + std::to_string(timeCreatedLocal->tm_min) + ':' + std::to_string(timeCreatedLocal->tm_sec));
     }
 
+    //TODO:GET RID OF THE print true/false (one function to print and one to return the value)
     std::string get_is_broken() {
-        if (this->w1.isBroken) {
+        if (this->isBroken) {
             return "true";
         }
         else {
@@ -72,7 +70,7 @@ public:
     }
 
     std::chrono::duration<double> get_time_duration(std::chrono::system_clock::time_point timeConsumed) {
-        return (timeConsumed - (this->w1.timeCreated));
+        return (timeConsumed - (this->timeCreated));
     }
 };
 
