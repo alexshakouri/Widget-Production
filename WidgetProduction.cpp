@@ -9,16 +9,14 @@
 #include "widget_definition.h"
 #include <pthread.h>
 
-//be better to include varnames here in parameters to let the reader kn ow what each function does!
-void produce_widget(std::vector<widget*>& createdWidgets, std::string producer, int idLength, int brokenWidget, int& totRWWidgetsCreated, int maxWidgets, int threadNum);
-void consume_widget(std::vector<widget*>& createdWidgets, std::string consumer, bool& consumeBrokenWidget);
+void produce_widget(std::vector<widget*>& createdWidgets, std::string producer, int idLength, int brokenWidget, int& totalWidgetsCreated, int maxWidgets, int threadNum);
+void consume_widget(std::vector<widget*>& createdWidgets, std::string consumer, bool& consumedBrokenWidget);
 
 //Use rwlocks to protect data
-pthread_rwlock_t tRWWidgets;
-pthread_rwlock_t tRWPrint;
-pthread_rwlock_t tRWBroken;
+pthread_rwlock_t widgetRWLock;
+pthread_rwlock_t printRWLock;
+pthread_rwlock_t brokenRWLock;
 
-#define gWidgetIdLength 32
 #define defaultTotalProducers 1
 #define defaultTotalConsumers 1
 #define defaultMaxWidgets 11
@@ -75,9 +73,10 @@ int main(int argc, char** args)
         }
     }
 
-    int totRWWidgetsCreated = 0;
+    int totalWidgetsCreated = 0;
+    const int widgetIdLength = 32;
     //TODO: protect isBrokenWidget using atomic type
-    bool consumeBrokenWidget = false;
+    bool consumedBrokenWidget = false;
     //widget pointer to store all the widgets created
     std::vector<widget*> createdWidgets;
     createdWidgets.reserve(maxWidgets);
@@ -85,21 +84,20 @@ int main(int argc, char** args)
     std::vector<std::thread> Consumers;
 
     //Initialize rwlocks to default
-    pthread_rwlock_init(&tRWWidgets, NULL);
-    pthread_rwlock_init(&tRWBroken, NULL);
-    pthread_rwlock_init(&tRWPrint, NULL);
+    pthread_rwlock_init(&widgetRWLock, NULL);
+    pthread_rwlock_init(&printRWLock, NULL);
+    pthread_rwlock_init(&brokenRWLock, NULL);
 
     for (int i = 0; i < totalProducers; i++) {
-        
-        std::string producerNum = "producer_" + std::to_string(i);
-        std::thread tempProducer(produce_widget, std::ref(createdWidgets), producerNum, gWidgetIdLength, brokenWidget, std::ref(totRWWidgetsCreated), maxWidgets, i);
+        std::string producerName = "producer_" + std::to_string(i);
+        std::thread tempProducer(produce_widget, std::ref(createdWidgets), producerName, widgetIdLength, brokenWidget, std::ref(totalWidgetsCreated), maxWidgets, i);
         //std::move() here allows the tempProducer thread to move because copy function for threads disabled
         Producers.push_back(std::move(tempProducer));
     }
     
     for (int i = 0; i < totalConsumers;i++) {
-        std::string consumerNum = "consumer_" + std::to_string(i);
-        std::thread tempConsumer(consume_widget, std::ref(createdWidgets), consumerNum, std::ref(consumeBrokenWidget));
+        std::string consumerName = "consumer_" + std::to_string(i);
+        std::thread tempConsumer(consume_widget, std::ref(createdWidgets), consumerName, std::ref(consumedBrokenWidget));
         Consumers.push_back(std::move(tempConsumer));
     }
     
@@ -118,71 +116,76 @@ int main(int argc, char** args)
 
 }
 
-void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,int idLength, int brokenWidget, int &totRWWidgetsCreated, int maxWidgets, int threadNum) {
-    while (totRWWidgetsCreated < maxWidgets) {
+void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,int idLength, int brokenWidget, int &totalWidgetsCreated, int maxWidgets, int threadNum) {
+    while (totalWidgetsCreated < maxWidgets) {
 	//Define the srand() when producing the widget in order to get different random numbers for each thread!
-        std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch());
+        //TODO:PRINT out the ns.count() for each thread (see that it is the same which gives you duplicates!!!!)
+	std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch());
         srand(ns.count() + threadNum); //random number/letter generator for each thread
 
-        pthread_rwlock_wrlock(&tRWWidgets);
-	createdWidgets.push_back(new widget(producer, idLength, totRWWidgetsCreated == brokenWidget));
-        totRWWidgetsCreated++;
-	pthread_rwlock_unlock(&tRWWidgets);
+        pthread_rwlock_wrlock(&widgetRWLock);
+	createdWidgets.push_back(new widget(producer, idLength, totalWidgetsCreated == brokenWidget));
+        totalWidgetsCreated++;
+	pthread_rwlock_unlock(&widgetRWLock);
         //Add a delay to let other producers get a chance to create widgets
-        //TODO: fix this so don't have to use a sleep function to wait for the threads to finish
-       	std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); //This seems to work for now anything lower and one thread takes over
+        //TODO: fix this so don't have to use a sleep function to wait for the threads to finish (yield?)
+       	std::this_thread::sleep_for(std::chrono::nanoseconds(1000));
     }
 }
 
-void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, bool &consumeBrokenWidget) {
+void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, bool &consumedBrokenWidget) {
     //protect isbrokenwidget in the while loop
-    pthread_rwlock_rdlock(&tRWBroken);
-    bool brokenProtect = consumeBrokenWidget;
-    pthread_rwlock_unlock(&tRWBroken);
+    pthread_rwlock_rdlock(&brokenRWLock);
+    bool isBroken = consumedBrokenWidget;
+    pthread_rwlock_unlock(&brokenRWLock);
 
-    while(!brokenProtect){
-	//Update this brokenProtect
-	pthread_rwlock_rdlock(&tRWBroken);
-        brokenProtect = consumeBrokenWidget;
-	pthread_rwlock_unlock(&tRWBroken);
+    while(!isBroken){
+	//Update this isBroken
+	pthread_rwlock_rdlock(&brokenRWLock);
+        isBroken = consumedBrokenWidget;
+	pthread_rwlock_unlock(&brokenRWLock);
         
 	//Check that there are widgets for the consumer to consume
-        pthread_rwlock_wrlock(&tRWWidgets);
+        pthread_rwlock_wrlock(&widgetRWLock);
         if (createdWidgets.empty()) {
-            pthread_rwlock_unlock(&tRWWidgets); //Unlock for other consumers
+            pthread_rwlock_unlock(&widgetRWLock); //Unlock for other consumeris
+	    //TODO: Replace continue with goto!!!
             continue;
         }
         //Take the widget out of the vector when consuming it (so the same widget doesn't get consumed twice)
         widget w = *createdWidgets.back();
         createdWidgets.pop_back();
-	pthread_rwlock_unlock(&tRWWidgets);
+	pthread_rwlock_unlock(&widgetRWLock);
 
         std::string widgetOutput = "[id=" + w.get_id() +
             " source=" + w.get_producer() +
             " time=" + w.get_time_created() +
             " broken=" + w.get_is_broken() + "]";
 
+	//TODO:FIX THE get_is_broken and print_is_broken
         if (w.get_is_broken() == "false") {
-	    pthread_rwlock_wrlock(&tRWPrint);
+	    pthread_rwlock_wrlock(&printRWLock);
             //Need to convert the time to string otherwise the time will be off and the newline won't print 
             //so some lines might combine
             std::cout << consumer << " consumes " << widgetOutput << " in "
                 << std::to_string(w.get_time_duration(std::chrono::system_clock::now()).count()) << "s time\n";
             //std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); This causes the program to consume the first widget multiple times??
-            pthread_rwlock_unlock(&tRWPrint);
+            pthread_rwlock_unlock(&printRWLock);
         }
         else {
-            pthread_rwlock_wrlock(&tRWBroken);
-            consumeBrokenWidget = true;
-	    pthread_rwlock_unlock(&tRWBroken);
+	    //TODO:possible don't need the writelock here as nothing is changing this to FALSE!!!! at the same time and only ONE broken ediget
+            pthread_rwlock_wrlock(&brokenRWLock);
+            consumedBrokenWidget = true;
+	    pthread_rwlock_unlock(&brokenRWLock);
 
-            pthread_rwlock_rdlock(&tRWBroken);
-	    brokenProtect = consumeBrokenWidget; //need to update brokenProtect as well to break the loop
-            pthread_rwlock_unlock(&tRWBroken);
+	    //TODO:goto to this area right here
+            pthread_rwlock_rdlock(&brokenRWLock);
+	    isBroken = consumedBrokenWidget; //need to update brokenProtect as well to break the loop
+            pthread_rwlock_unlock(&brokenRWLock);
 	    //Need to lock print too otherwise can print consumes and broken widget at same time
-	    pthread_rwlock_wrlock(&tRWPrint);
+	    pthread_rwlock_wrlock(&printRWLock);
             std::cout << consumer << " found a broken widget " << widgetOutput << " -- stopping production\n";
-            pthread_rwlock_unlock(&tRWPrint);
+            pthread_rwlock_unlock(&printRWLock);
         }
     }
 

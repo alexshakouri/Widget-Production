@@ -57,6 +57,8 @@ public:
         time_t timeCreatedEpoch = std::chrono::system_clock::to_time_t(this->timeCreated);
 	struct tm* timeCreatedLocal = std::localtime(&timeCreatedEpoch); //convert [time since epoch] to [local time]
         return (std::to_string(timeCreatedLocal->tm_hour) + ':' + std::to_string(timeCreatedLocal->tm_min) + ':' + std::to_string(timeCreatedLocal->tm_sec));
+	//std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(this->timeCreated.time_since_epoch());
+	//return ns.count();
     }
 
     //TODO:GET RID OF THE print true/false (one function to print and one to return the value)
