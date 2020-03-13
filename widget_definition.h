@@ -5,6 +5,8 @@
 #include <chrono>
 #include <thread>
 
+#define NanosecondsInHour 3600000000000 
+
 class widget {
 private:
     std::string id;
@@ -54,11 +56,13 @@ public:
     //TODO: output the time in milliseconds to see a difference
     //TODO:HAVE ONE FUNCTION TO PRINT time and another to RETURN TIME
     std::string get_time_created() {
-        time_t timeCreatedEpoch = std::chrono::system_clock::to_time_t(this->timeCreated);
-	struct tm* timeCreatedLocal = std::localtime(&timeCreatedEpoch); //convert [time since epoch] to [local time]
-        return (std::to_string(timeCreatedLocal->tm_hour) + ':' + std::to_string(timeCreatedLocal->tm_min) + ':' + std::to_string(timeCreatedLocal->tm_sec));
-	//std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(this->timeCreated.time_since_epoch());
-	//return ns.count();
+        //time_t timeCreatedEpoch = std::chrono::system_clock::to_time_t(this->timeCreated);
+	//struct tm* timeCreatedLocal = std::localtime(&timeCreatedEpoch); //convert [time since epoch] to [local time]
+        //return (std::to_string(timeCreatedLocal->tm_hour) + ':' + std::to_string(timeCreatedLocal->tm_min) + ':' + std::to_string(timeCreatedLocal->tm_sec));
+	std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(this->timeCreated.time_since_epoch());
+        //All I want is the past hour
+	ns = ns % NanosecondsInHour;	
+	return std::to_string(ns.count());
     }
 
     //TODO:GET RID OF THE print true/false (one function to print and one to return the value)
