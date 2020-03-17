@@ -117,17 +117,27 @@ int main(int argc, char** args)
 }
 
 void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,int idLength, int brokenWidget, int &totalWidgetsCreated, int maxWidgets, int threadNum) {
-    while (totalWidgetsCreated < maxWidgets) {
+    pthread_rwlock_rdlock(&widgetRWLock);
+    int localTotalWidgetsCreated = totalWidgetsCreated;
+    pthread_rwlock_unlock(&widgetRWLock);
+
+    while (localTotalWidgetsCreated < maxWidgets) {
 	//Define the srand() when producing the widget in order to get different random numbers for each thread!
-        //TODO:PRINT out the ns.count() for each thread (see that it is the same which gives you duplicates!!!!)
+	//TODO:Check the output of the ns.count() to check threads have same ns! (created at different times)
 	std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch());
         srand(ns.count() + threadNum); //random number/letter generator for each thread
 
         pthread_rwlock_wrlock(&widgetRWLock);
+	localTotalWidgetsCreated = totalWidgetsCreated;
+	if(localTotalWidgetsCreated >= maxWidgets){
+            pthread_rwlock_unlock(&widgetRWLock);
+            break;
+	}
 	createdWidgets.push_back(new widget(producer, idLength, totalWidgetsCreated == brokenWidget));
-        totalWidgetsCreated++;
-	pthread_rwlock_unlock(&widgetRWLock);
-        //Add a delay to let other producers get a chance to create widgets
+        totalWidgetsCreated++; //Need to update both the creation of the widget and the number under the same mutex
+        pthread_rwlock_unlock(&widgetRWLock);    
+
+               //Add a delay to let other producers get a chance to create widgets
         //TODO: fix this so don't have to use a sleep function to wait for the threads to finish (yield?)
        	std::this_thread::sleep_for(std::chrono::nanoseconds(1000));
     }
@@ -159,11 +169,11 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
 
         std::string widgetOutput = "[id=" + w.get_id() +
             " source=" + w.get_producer() +
-            " time=" + w.get_time_created() +
-            " broken=" + w.get_is_broken() + "]";
+            " time=" + w.print_time_created() +
+            " broken=" + w.print_is_broken() + "]";
 
 	//TODO:FIX THE get_is_broken and print_is_broken
-        if (w.get_is_broken() == "false") {
+        if (!w.get_is_broken()) {
 	    pthread_rwlock_wrlock(&printRWLock);
             //Need to convert the time to string otherwise the time will be off and the newline won't print 
             //so some lines might combine

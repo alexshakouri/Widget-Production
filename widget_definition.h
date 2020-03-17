@@ -52,10 +52,11 @@ public:
         return this->producer;
     }
 
-    //Get time in string format HH:MM:SS to output to STDOUT
-    //TODO: output the time in milliseconds to see a difference
-    //TODO:HAVE ONE FUNCTION TO PRINT time and another to RETURN TIME
-    std::string get_time_created() {
+    std::chrono::system_clock::time_point get_time_created(){
+        return this->timeCreated;
+    }
+    
+    std::string print_time_created() {
         //time_t timeCreatedEpoch = std::chrono::system_clock::to_time_t(this->timeCreated);
 	//struct tm* timeCreatedLocal = std::localtime(&timeCreatedEpoch); //convert [time since epoch] to [local time]
         //return (std::to_string(timeCreatedLocal->tm_hour) + ':' + std::to_string(timeCreatedLocal->tm_min) + ':' + std::to_string(timeCreatedLocal->tm_sec));
@@ -66,7 +67,11 @@ public:
     }
 
     //TODO:GET RID OF THE print true/false (one function to print and one to return the value)
-    std::string get_is_broken() {
+    bool get_is_broken() {
+        return this->isBroken;	    
+    }
+    
+    std::string print_is_broken() {
         if (this->isBroken) {
             return "true";
         }
