@@ -157,7 +157,8 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
         
 	//Check that there are widgets for the consumer to consume
         pthread_rwlock_wrlock(&widgetRWLock);
-        if (createdWidgets.empty()) {
+	//Need to check to make sure isn't broken as well
+        if (createdWidgets.empty() || isBroken) {
             pthread_rwlock_unlock(&widgetRWLock); //Unlock for other consumeris
 	    //TODO: Replace continue with goto!!!
             continue;
