@@ -21,6 +21,7 @@ pthread_rwlock_t brokenRWLock;
 #define defaultTotalConsumers 1
 #define defaultMaxWidgets 11
 #define defaultBrokenWidget 1
+#define defaultNanosecondSleep 1000
 
 int main(int argc, char** args)
 {
@@ -139,7 +140,7 @@ void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,i
 
                //Add a delay to let other producers get a chance to create widgets
         //TODO: fix this so don't have to use a sleep function to wait for the threads to finish (yield?)
-       	std::this_thread::sleep_for(std::chrono::nanoseconds(1000));
+       	std::this_thread::sleep_for(std::chrono::nanoseconds(defaultNanosecondSleep));
     }
 }
 
@@ -197,6 +198,8 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
             std::cout << consumer << " found a broken widget " << createdWidgetOutput << " -- stopping production\n";
             pthread_rwlock_unlock(&printRWLock);
         }
+	std::this_thread::sleep_for(std::chrono::nanoseconds(defaultNanosecondSleep));
+
     }
 
 }
