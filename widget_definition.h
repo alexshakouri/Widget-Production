@@ -5,7 +5,10 @@
 #include <chrono>
 #include <thread>
 
-#define NanosecondsInHour 3600000000000 
+#define NanosecondsPerDay 86400000000000
+#define NanosecondsPerHour (NanosecondsPerDay/24)
+#define NanosecondsPerMinute (NanosecondsPerHour/60)
+#define NanosecondsPerSecond (NanosecondsPerMinute/60)
 
 class widget {
 private:
@@ -57,13 +60,17 @@ public:
     }
     
     std::string print_time_created() {
-        //time_t timeCreatedEpoch = std::chrono::system_clock::to_time_t(this->timeCreated);
-	//struct tm* timeCreatedLocal = std::localtime(&timeCreatedEpoch); //convert [time since epoch] to [local time]
-        //return (std::to_string(timeCreatedLocal->tm_hour) + ':' + std::to_string(timeCreatedLocal->tm_min) + ':' + std::to_string(timeCreatedLocal->tm_sec));
-	std::chrono::nanoseconds ns = std::chrono::duration_cast<std::chrono::nanoseconds>(this->timeCreated.time_since_epoch());
-        //All I want is the past hour
-	ns = ns % NanosecondsInHour;	
-	return std::to_string(ns.count());
+	std::chrono::microseconds ns = std::chrono::duration_cast<std::chrono::microseconds>(this->timeCreated.time_since_epoch());
+        //hour:min:sec.microsecond
+	ns = ns % NanosecondsPerDay;
+	int nsHour = ns.count() / NanosecondsPerHour;
+        ns = ns % NanosecondsPerHour;
+        int nsMinute = ns.count() / NanosecondsPerMinute;
+	ns = ns % NanosecondsPerMinute;
+	int nsSecond = ns.count() / NanosecondsPerSecond;
+	ns = ns % NanosecondsPerSecond;
+        	
+	return (std::to_string(nsHour) + ":" + std::to_string(nsMinute) + ":" + std::to_string(nsSecond) + "." + std::to_string(ns.count()));
     }
 
     bool get_is_broken() {
