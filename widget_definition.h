@@ -66,7 +66,6 @@ public:
 	return std::to_string(ns.count());
     }
 
-    //TODO:GET RID OF THE print true/false (one function to print and one to return the value)
     bool get_is_broken() {
         return this->isBroken;	    
     }

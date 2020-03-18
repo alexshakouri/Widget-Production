@@ -140,6 +140,7 @@ void produce_widget(std::vector<widget*> &createdWidgets, std::string producer,i
 
                //Add a delay to let other producers get a chance to create widgets
         //TODO: fix this so don't have to use a sleep function to wait for the threads to finish (yield?)
+	//yield = sleep_for(0) and doesn't seem to work
        	std::this_thread::sleep_for(std::chrono::nanoseconds(defaultNanosecondSleep));
     }
 }
@@ -149,50 +150,46 @@ void consume_widget(std::vector<widget*> &createdWidgets, std::string consumer, 
     pthread_rwlock_rdlock(&brokenRWLock);
     bool isBroken = consumedBrokenWidget;
     pthread_rwlock_unlock(&brokenRWLock);
+    widget* localWidget;
+    std::string createdWidgetOutput;
 
     while(!isBroken){
-	//Update this isBroken
-	pthread_rwlock_rdlock(&brokenRWLock);
+	//update IsBroken
+        pthread_rwlock_rdlock(&brokenRWLock);
         isBroken = consumedBrokenWidget;
 	pthread_rwlock_unlock(&brokenRWLock);
-        
+	
 	//Check that there are widgets for the consumer to consume
         pthread_rwlock_wrlock(&widgetRWLock);
 	//Need to check to make sure isn't broken as well
         if (createdWidgets.empty() || isBroken) {
             pthread_rwlock_unlock(&widgetRWLock); //Unlock for other consumeris
-	    //TODO: Replace continue with goto!!!
             continue;
         }
         //Take the widget out of the vector when consuming it (so the same widget doesn't get consumed twice)
-        widget localWidget = *createdWidgets.back();
+        localWidget = createdWidgets.back();
         createdWidgets.pop_back();
 	pthread_rwlock_unlock(&widgetRWLock);
 
-        std::string createdWidgetOutput = "[id=" + localWidget.get_id() +
-            " source=" + localWidget.get_producer() +
-            " time=" + localWidget.print_time_created() +
-            " broken=" + localWidget.print_is_broken() + "]";
+        createdWidgetOutput = "[id=" + localWidget->get_id() +
+            " source=" + localWidget->get_producer() +
+            " time=" + localWidget->print_time_created() +
+            " broken=" + localWidget->print_is_broken() + "]";
 
-        if (!localWidget.get_is_broken()) {
+        if (!localWidget->get_is_broken()) {
 	    pthread_rwlock_wrlock(&printRWLock);
             //Need to convert the time to string otherwise the time will be off and the newline won't print 
             //so some lines might combine
             std::cout << consumer << " consumes " << createdWidgetOutput << " in "
-                << std::to_string(localWidget.get_time_duration(std::chrono::system_clock::now()).count()) << "s time\n";
+                << std::to_string(localWidget->get_time_duration(std::chrono::system_clock::now()).count()) << "s time\n";
             //std::this_thread::sleep_for(std::chrono::nanoseconds(1000)); This causes the program to consume the first widget multiple times??
             pthread_rwlock_unlock(&printRWLock);
         }
         else {
-	    //TODO:possible don't need the writelock here as nothing is changing this to FALSE!!!! at the same time and only ONE broken ediget
             pthread_rwlock_wrlock(&brokenRWLock);
             consumedBrokenWidget = true;
 	    pthread_rwlock_unlock(&brokenRWLock);
 
-	    //TODO:goto to this area right here
-            pthread_rwlock_rdlock(&brokenRWLock);
-	    isBroken = consumedBrokenWidget; //need to update brokenProtect as well to break the loop
-            pthread_rwlock_unlock(&brokenRWLock);
 	    //Need to lock print too otherwise can print consumes and broken widget at same time
 	    pthread_rwlock_wrlock(&printRWLock);
             std::cout << consumer << " found a broken widget " << createdWidgetOutput << " -- stopping production\n";
